@@ -1,0 +1,111 @@
+---
+- hosts: all
+  gather_facts: no
+  connection: local
+  tasks:
+  - name: Wait until ssh ports are opened
+    wait_for:
+      host: "{{ inventory_hostname }}"
+      port: 22
+
+- hosts: all
+  gather_facts: no
+  remote_user: ubuntu
+  become: yes
+  roles:
+  - basic
+
+- hosts: all
+  remote_user: ubuntu
+  vars:
+    NODEJS_VERSION: "8"
+    archive_path: /home/bahriddin/Documents/nectar.tar.gz
+    server_user: ubuntu
+  tasks:
+    - name: Installing textblob
+      become: no
+      pip:
+        name: textblob
+        extra_args: -U
+      notify:
+      - download corpora
+    - name: Copy and extract nectar-twitter-analytics to the servers
+      unarchive:
+        src: "{{ archive_path }}"
+        dest: "/home/{{ server_user }}"
+        creates: nectar-twitter-analytics
+
+    - name: Install the gpg key for nodejs LTS
+      become: yes
+      apt_key:
+        url: "https://deb.nodesource.com/gpgkey/nodesource.gpg.key"
+        state: present
+    - name: Install the nodejs LTS repos
+      become: yes
+      apt_repository:
+        repo: "deb https://deb.nodesource.com/node_{{ NODEJS_VERSION }}.x {{ ansible_distribution_release }} main"
+        state: present
+        update_cache: yes
+    - name: Install the nodejs
+      become: yes
+      apt:
+        name: nodejs
+        state: present
+    - name: "Install forever to run apps in background."
+      become: yes
+      npm: name=forever global=yes state=present
+
+  handlers:
+    - name: download corpora
+      shell: python -m textblob.download_corpora
+      args:
+        creates: nltk_data
+
+- hosts: webservers
+  remote_user: ubuntu
+  become: yes
+  vars:
+    remote_path: /home/ubuntu/nectar-twitter-analytics/analytics-website
+    database_ip: 115.146.86.134
+    database_port: 9000
+    server_port: 3000
+  tasks:
+    - name: Install all npm packages
+      npm:
+        path: "{{ remote_path }}"
+    - name: Run npm in build-dev
+      shell: npm run build-dev
+      args:
+        chdir: "{{ remote_path }}"
+    - name: "Check list of Node.js apps running."
+      command: forever list
+      register: forever_list
+      changed_when: false
+    - name: "Start server: listening 3000."
+      command: forever start {{ remote_path }}/server/index.js {{ server_port }} {{ database_ip }} {{ database_port }}
+      when: "forever_list.stdout.find('server/index.js') == -1"
+
+- hosts: all
+  gather_facts: no
+  remote_user: ubuntu
+  vars:
+    harvest_path: /home/ubuntu/nectar-twitter-analytics/harvest
+  tasks:
+    - name: "Check list of running apps forever."
+      command: forever list
+      register: forever_list
+      changed_when: false
+    - name: Run harvester 1
+      command: forever start -c python3 {{ harvest_path }}/harvestLive.py --user admin --password admin --host 115.146.86.134:9000 --id 0 --total 4 --maxtweets 100
+      when: "forever_list.stdout.find('harvestLive') == -1"
+    - name: Run harvester 2
+      command: forever start -c python3 {{ harvest_path }}/harvestLive.py --user admin --password admin --host 115.146.86.134:9000 --id 1 --total 4 --maxtweets 100
+      when: "forever_list.stdout.find('harvestLive') == -1"
+    - name: Run harvester 3
+      command: forever start -c python3 {{ harvest_path }}/harvestLive.py --user admin --password admin --host 115.146.86.134:9000 --id 2 --total 4 --maxtweets 100
+      when: "forever_list.stdout.find('harvestLive') == -1"
+    - name: Run harvester 4
+      command: forever start -c python3 {{ harvest_path }}/harvestLive.py --user admin --password admin --host 115.146.86.134:9000 --id 3 --total 4 --maxtweets 100
+      when: "forever_list.stdout.find('harvestLive') == -1"
+
+

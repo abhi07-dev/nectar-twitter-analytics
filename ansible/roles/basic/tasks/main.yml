@@ -1,0 +1,33 @@
+- name: Wait until dpkg installer becomes available
+  shell: while sudo fuser /var/lib/dpkg/lock >/dev/null 2>&1; do sleep 8; done;
+
+- name: Update apt cache for sure
+  apt: update_cache=yes cache_valid_time=3600
+  register: apt_status
+  until: apt_status is success
+  delay: 3
+  retries: 10
+
+- name: Installing necessary apps
+  apt: pkg={{ item }} state=latest
+  with_items:
+  - vim
+  - python
+  - python3
+  - python-pip
+  - python3-pip
+  - python3-shapely
+  - git
+
+- name: Installing pip packages
+  become: no
+  pip: name={{ item }} executable=pip3
+  with_items:
+  - tweepy
+  - shapely
+  - numpy
+  - couchdb
+  - lxml
+  - pyquery
+  - numpy
+  - pyshp
