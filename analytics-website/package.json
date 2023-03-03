@@ -29,7 +29,7 @@
   "dependencies": {
     "express": "^4.16.3",
     "l": "^0.6.0",
-    "plotly.js": "^1.37.1",
+    "plotly.js": "^1.58.5",
     "react": "^16.3.2",
     "react-dom": "^16.3.2",
     "react-google-maps": "^9.4.5",
